@@ -2,12 +2,14 @@
 # M0 cleanup: disable the vkms output and unload the module.
 set -euo pipefail
 
-CONNECTOR="$(kscreen-doctor -o 2>/dev/null \
+ksd() { kscreen-doctor "$@" 2>&1 | sed -E 's/\x1b\[[0-9;]*m//g'; }
+
+CONNECTOR="$(ksd -o \
     | awk '/^Output:/ {for (i=1;i<=NF;i++) if ($i ~ /^Virtual-/) {print $i; exit}}' || true)"
 
 if [[ -n "$CONNECTOR" ]]; then
     echo "==> Disabling $CONNECTOR"
-    kscreen-doctor "output.${CONNECTOR}.disable" 2>&1 || true
+    ksd "output.${CONNECTOR}.disable" || true
     sleep 1
 fi
 
