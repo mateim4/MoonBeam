@@ -11,6 +11,10 @@ TARGET_W=2960
 TARGET_H=1848
 TARGET_MHZ=120000
 
+# Qt prints a locale warning on every invocation under LC_ALL=C; force UTF-8
+# so version-getters return the actual version, not the warning.
+export LC_ALL=C.UTF-8
+
 # kscreen-doctor emits ANSI color codes that break awk anchors. Strip them.
 ksd() { kscreen-doctor "$@" 2>&1 | sed -E 's/\x1b\[[0-9;]*m//g'; }
 
@@ -88,6 +92,31 @@ CHECK2="$(awk -v c="$CONNECTOR" '
     found && /^Output:/ && !($0 ~ "Output:.*"c) { found=0 }
     found {print; n++; if (n>=20) exit}' <<<"$KSD_OUT")"
 
+# ---- Stimulus: vkms only ticks its vblank timer while something renders.
+# Spawn an animated source on Virtual-1 so the timer is actually running. ----
+STIMULUS_PID=""
+if command -v mpv >/dev/null 2>&1; then
+    echo "==> Spawning mpv stimulus on $CONNECTOR (testsrc @ 120fps)"
+    mpv --really-quiet --no-audio --loop=inf --vo=gpu --gpu-context=wayland \
+        --fs --fs-screen-name="$CONNECTOR" --screen-name="$CONNECTOR" \
+        --no-input-default-bindings --osd-level=0 \
+        av://lavfi:testsrc=size=1920x1080:rate=120 \
+        >/dev/null 2>&1 &
+    STIMULUS_PID=$!
+    sleep 3
+elif command -v ffplay >/dev/null 2>&1; then
+    echo "==> Spawning ffplay stimulus (output targeting may not work on Wayland)"
+    ffplay -loglevel quiet -fs -loop 0 \
+        -f lavfi -i 'testsrc=size=1920x1080:rate=120' >/dev/null 2>&1 &
+    STIMULUS_PID=$!
+    sleep 3
+else
+    echo "==> WARNING: no stimulus generator (mpv/ffplay) — Virtual-1 will be idle"
+    echo "    Drag any animated window (video, terminal with tail -f, etc.)"
+    echo "    onto Virtual-1 NOW, then press Enter to continue."
+    read -r _
+fi
+
 # ---- Check 3: vblank cadence over 5s (the real test) ----
 echo "==> Check 3: counting drm_vblank_event over 5s"
 CHECK3=""
@@ -124,6 +153,12 @@ TRACE_EOF
     rm -f "$TRACE_SCRIPT"
 else
     CHECK3="(no tracing facility available — install perf or bpftrace)"
+fi
+
+if [[ -n "$STIMULUS_PID" ]]; then
+    echo "==> Stopping stimulus (PID $STIMULUS_PID)"
+    kill "$STIMULUS_PID" 2>/dev/null || true
+    wait "$STIMULUS_PID" 2>/dev/null || true
 fi
 
 # ---- Build results doc ----
