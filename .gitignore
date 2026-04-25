@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Rust (if we migrate later)
+target/
+Cargo.lock
+
+# Android
+android/build/
+android/.gradle/
+android/local.properties
+*.apk
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Build outputs
+build/
+dist/
+
+# Logs / runtime
+*.log
+*.pid
