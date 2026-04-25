@@ -13,7 +13,7 @@ if [[ -n "$CONNECTOR" ]]; then
     sleep 1
 fi
 
-if lsmod | grep -q '^vkms '; then
+if lsmod | grep '^vkms ' >/dev/null; then
     echo "==> Unloading vkms"
     sudo modprobe -r vkms 2>&1 || {
         echo "    failed to unload vkms (still in use); reboot may be needed" >&2

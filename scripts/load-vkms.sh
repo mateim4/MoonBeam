@@ -3,7 +3,7 @@
 # Idempotent: safe to re-run.
 set -euo pipefail
 
-if lsmod | grep -q '^vkms '; then
+if lsmod | grep '^vkms ' >/dev/null; then
     echo "vkms already loaded"
 else
     sudo modprobe vkms enable_writeback=1
@@ -12,4 +12,5 @@ fi
 
 echo
 echo "Connectors visible to KDE:"
-kscreen-doctor -o | grep -E '^Output:'
+# Strip ANSI color escapes; tolerate no matches.
+kscreen-doctor -o 2>/dev/null | sed -E 's/\x1b\[[0-9;]*m//g' | grep -E '^Output:' || true

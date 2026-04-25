@@ -19,8 +19,10 @@ echo "==> Loading vkms"
 sleep 1
 
 echo "==> Finding Virtual-* connector"
-CONNECTOR="$(ksd -o \
-    | awk '/^Output:/ {for (i=1;i<=NF;i++) if ($i ~ /^Virtual-/) {print $i; exit}}')"
+# Capture once and feed via here-string to avoid SIGPIPE-vs-pipefail issues
+# when awk exits early after the first match.
+KSD_OUT="$(ksd -o)"
+CONNECTOR="$(awk '/^Output:/ {for (i=1;i<=NF;i++) if ($i ~ /^Virtual-/) {print $i; exit}}' <<<"$KSD_OUT")"
 if [[ -z "$CONNECTOR" ]]; then
     echo "FAIL: no Virtual-* connector visible to kscreen-doctor" >&2
     echo "Current outputs:" >&2
@@ -37,27 +39,27 @@ sleep 1
 
 echo "==> Locating mode ID for ${TARGET_W}x${TARGET_H}@~120Hz"
 # kscreen-doctor rounds 120000mHz to "119.99" — match @11x or @12x to be tolerant.
-MODE_ID="$(ksd -o \
-    | awk -v c="$CONNECTOR" -v w="$TARGET_W" -v h="$TARGET_H" '
-        $0 ~ "Output:.*"c { in_block=1; next }
-        in_block && /^Output:/ { in_block=0 }
-        in_block {
-            for (i=1;i<=NF;i++) {
-                if ($i ~ ":"w"x"h"@1[12]") {
-                    n = split($i, parts, ":")
-                    print parts[1]
-                    exit
-                }
+KSD_OUT="$(ksd -o)"
+MODE_ID="$(awk -v c="$CONNECTOR" -v w="$TARGET_W" -v h="$TARGET_H" '
+    $0 ~ "Output:.*"c { in_block=1; next }
+    in_block && /^Output:/ { in_block=0 }
+    in_block {
+        for (i=1;i<=NF;i++) {
+            if ($i ~ ":"w"x"h"@1[12]") {
+                n = split($i, parts, ":")
+                print parts[1]
+                exit
             }
-        }')"
+        }
+    }' <<<"$KSD_OUT")"
 if [[ -z "$MODE_ID" ]]; then
     echo "FAIL: ${TARGET_W}x${TARGET_H}@120 mode not present after addCustomMode" >&2
     echo "    KWin likely rejected the mode at validation time." >&2
-    echo "    Custom modes for $CONNECTOR:" >&2
-    ksd -o | awk -v c="$CONNECTOR" '
+    echo "    Modes for $CONNECTOR:" >&2
+    awk -v c="$CONNECTOR" '
         $0 ~ "Output:.*"c { found=1 }
         found && /^Output:/ && !($0 ~ "Output:.*"c) { found=0 }
-        found && /Custom modes:|Modes:/' >&2
+        found && /Custom modes:|Modes:/' <<<"$KSD_OUT" >&2
     exit 1
 fi
 echo "    mode_id = $MODE_ID"
@@ -80,10 +82,11 @@ fi
 
 # ---- Check 2: KWin output sanity ----
 echo "==> Check 2: KWin output report"
-CHECK2="$(ksd -o | awk -v c="$CONNECTOR" '
+KSD_OUT="$(ksd -o)"
+CHECK2="$(awk -v c="$CONNECTOR" '
     $0 ~ "Output:.*"c { found=1 }
     found && /^Output:/ && !($0 ~ "Output:.*"c) { found=0 }
-    found' | head -20)"
+    found {print; n++; if (n>=20) exit}' <<<"$KSD_OUT")"
 
 # ---- Check 3: vblank cadence over 5s (the real test) ----
 echo "==> Check 3: counting drm_vblank_event over 5s"
