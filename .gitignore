@@ -5,9 +5,8 @@ __pycache__/
 .venv/
 venv/
 
-# Rust (if we migrate later)
+# Rust
 target/
-Cargo.lock
 
 # Android
 android/build/
