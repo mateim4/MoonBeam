@@ -14,13 +14,14 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 anyhow = "1"
 drm = "0.14"
+pipewire = "0.9"
+ashpd = { version = "0.10", default-features = false, features = ["tokio"] }
 
 # The following crates are pinned in the design (docs/ARCHITECTURE.md, plan)
 # and will be added here as their corresponding modules gain real implementations:
 #   axum 0.7              — HTTP + WebSocket server (transport/)
 #   tower-http 0.6        — static-asset serving (transport/)
 #   ffmpeg-next 7.1       — NVENC encode (encode/)
-#   pipewire 0.8          — fallback screencast capture (capture/)
 #   input-linux 0.7       — uinput pen + multitouch device builders (input/)
 #   thiserror 2.0         — typed errors at module boundaries (error.rs)
 #   serde, serde_json, toml — config + control protocol (config.rs, proto/)
