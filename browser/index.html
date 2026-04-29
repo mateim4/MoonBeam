@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<!--
+  MoonBeam M1 step 4 — debugging-only browser client.
+
+  Connects to the host daemon's /ws endpoint, parses the wire format
+  defined in docs/MOONBEAM-APP-PLAN.md §5.1 ([type:u8][flags:u8][payload])
+  and feeds each video access unit into a WebCodecs VideoDecoder.
+
+  This is not a product. The native Android app (M3) is what users will
+  actually run; this page exists only so we can verify the host's
+  transport before any Android code is written.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MoonBeam — transport probe</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #000; color: #ddd;
+                 font: 13px/1.4 system-ui, sans-serif; }
+    #log { position: fixed; left: 8px; top: 8px; padding: 6px 10px;
+           background: rgba(0,0,0,0.6); border-radius: 4px; max-width: 50%;
+           white-space: pre-wrap; pointer-events: none; }
+    canvas { display: block; width: 100vw; height: 100vh; object-fit: contain; }
+  </style>
+</head>
+<body>
+  <canvas id="screen" width="1920" height="1080"></canvas>
+  <div id="log">connecting…</div>
+
+<script>
+const TYPE_VIDEO = 0x01;
+const FLAG_KEYFRAME = 0x01;
+
+const canvas = document.getElementById("screen");
+const ctx = canvas.getContext("2d");
+const logEl = document.getElementById("log");
+
+let stats = { recv: 0, decoded: 0, dropped: 0, lastReport: performance.now() };
+
+function log(...args) {
+  const msg = args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ");
+  console.log(msg);
+  logEl.textContent = msg;
+}
+
+if (typeof VideoDecoder !== "function") {
+  log("WebCodecs not supported in this browser. Use a current Chrome/Edge or Firefox 130+.");
+  throw new Error("no WebCodecs");
+}
+
+let decoder = null;
+let configured = false;
+let firstFrameSeen = false;
+
+function setupDecoder(width, height) {
+  decoder = new VideoDecoder({
+    output: (frame) => {
+      stats.decoded++;
+      if (!firstFrameSeen) {
+        firstFrameSeen = true;
+        canvas.width = frame.codedWidth;
+        canvas.height = frame.codedHeight;
+        log(`decoding ${frame.codedWidth}x${frame.codedHeight}`);
+      }
+      ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+      frame.close();
+    },
+    error: (e) => log("decoder error:", e.message || String(e)),
+  });
+  // Annex-B mode: no description = decoder pulls SPS/PPS from the
+  // stream itself (NVENC prepends them to every IDR by default).
+  // Codec string is the one ffprobe reported for probe-encode's output.
+  decoder.configure({
+    codec: "avc1.4d4033",
+    optimizeForLatency: true,
+  });
+  configured = true;
+}
+
+function connect() {
+  const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+  log(`connecting to ${url}`);
+  const ws = new WebSocket(url);
+  ws.binaryType = "arraybuffer";
+
+  ws.onopen = () => log("ws open, waiting for first keyframe…");
+  ws.onclose = () => {
+    log("ws closed, reconnecting in 1s");
+    setTimeout(connect, 1000);
+    configured = false;
+    firstFrameSeen = false;
+    if (decoder) { try { decoder.close(); } catch {} decoder = null; }
+  };
+  ws.onerror = (e) => console.warn("ws error", e);
+
+  ws.onmessage = (ev) => {
+    const view = new Uint8Array(ev.data);
+    if (view.length < 2) return;
+    const type = view[0];
+    const flags = view[1];
+    if (type !== TYPE_VIDEO) return;
+    const isKey = (flags & FLAG_KEYFRAME) !== 0;
+    const annexB = view.subarray(2);
+
+    stats.recv++;
+
+    // Wait for first keyframe before configuring + decoding.
+    if (!configured) {
+      if (!isKey) { stats.dropped++; return; }
+      setupDecoder();
+    }
+
+    try {
+      decoder.decode(new EncodedVideoChunk({
+        type: isKey ? "key" : "delta",
+        timestamp: performance.now() * 1000,  // microseconds
+        data: annexB,
+      }));
+    } catch (e) {
+      log("decode threw:", e.message || String(e));
+    }
+
+    const now = performance.now();
+    if (now - stats.lastReport > 1000) {
+      log(`recv=${stats.recv} decoded=${stats.decoded} dropped_pre_idr=${stats.dropped}`);
+      stats.lastReport = now;
+    }
+  };
+}
+
+connect();
+</script>
+</body>
+</html>
