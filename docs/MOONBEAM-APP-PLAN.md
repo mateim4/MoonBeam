@@ -265,10 +265,20 @@ Explicitly **not** needed:
 
 ## 14. Implementation milestones (this doc unblocks)
 
-This plan does not start any implementation. Implementation order
-remains as in `ROADMAP.md`:
+This plan does not start any implementation. Milestone order remains
+as in `ROADMAP.md`; this doc is the spec the Android client is built
+against once the host milestones below have unblocked it:
 
-- **M1 step 4** (next): browser-side WebSocket+WebCodecs probe to
-  validate the host's transport. Browser code is throwaway.
-- **M2**: input return path (uinput).
-- **M3**: native Android app, using this plan as the spec.
+- **M1** ✅ end-to-end video over WebSocket, browser-side debug
+  client (`probe-stream` + `browser/index.html`).
+- **M2** (next): input return path. Host-side `uinput` pen +
+  multitouch device, WS control channel, verified end-to-end with
+  synthetic events into Krita.
+- **M3**: USB-C wired transport (`adb reverse`). The Android app
+  starts taking shape here — minimum viable app that opens the WS,
+  decodes via `MediaCodec`, and forwards touch/pen events back. This
+  is the first milestone where the app exists at all.
+- **M4**: tuning + polish. The Android app matures across this
+  milestone — pairing UX, floating widget, audio, per-host saved
+  modes, S-Pen feature integration. This doc is the spec that work
+  is checked against.
