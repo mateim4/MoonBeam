@@ -56,6 +56,8 @@ use tower_http::services::ServeDir;
 
 const TYPE_VIDEO: u8 = 0x01;
 const TYPE_INPUT: u8 = 0x03;
+const TYPE_PING: u8 = 0x04;
+const TYPE_PONG: u8 = 0x05;
 const FLAG_KEYFRAME: u8 = 0x01;
 
 // 64 access units ≈ 1s at 60fps; a slow client gets one second of
@@ -289,7 +291,17 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             },
             msg = socket.recv() => match msg {
                 Some(Ok(Message::Binary(bytes))) => {
-                    if let Err(e) = handle_inbound(&bytes, &state).await {
+                    // Quick-path PING: rewrite the type byte to PONG
+                    // and bounce the payload back. Done before any
+                    // JSON parsing so RTT measurements aren't biased
+                    // by the slowest serialiser on the path.
+                    if bytes.len() >= 2 && bytes[0] == TYPE_PING {
+                        let mut pong = bytes.to_vec();
+                        pong[0] = TYPE_PONG;
+                        if socket.send(Message::Binary(pong.into())).await.is_err() {
+                            break;
+                        }
+                    } else if let Err(e) = handle_inbound(&bytes, &state).await {
                         eprintln!("inbound frame error: {e:#}");
                     }
                 }

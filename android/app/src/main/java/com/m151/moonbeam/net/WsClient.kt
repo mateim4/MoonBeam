@@ -103,6 +103,16 @@ class WsClient(
         return socket.send(ByteString.of(*frame))
     }
 
+    /**
+     * Send a ping with the given monotonic timestamp (microseconds).
+     * Server echoes it back as PONG with the same payload.
+     */
+    fun sendPing(timestampUs: Long): Boolean {
+        val socket = this.socket ?: return false
+        val frame = Wire.encodePing(timestampUs)
+        return socket.send(ByteString.of(*frame))
+    }
+
     sealed class Event {
         data object Open : Event()
         data class Frame(val inbound: Wire.Inbound) : Event()

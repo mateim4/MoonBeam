@@ -23,7 +23,7 @@ import kotlin.math.sin
  * (not reused) so libinput can't dedupe two real touches.
  */
 class TouchHandler(
-    private val send: (InputMsg) -> Unit,
+    private val send: (InputMsg, eventTimeMs: Long) -> Unit,
     private val pressureMax: Int = 4095,
 ) {
     private val activeSlots = IntArray(MAX_SLOTS) { -1 } // slot -> tracking_id (or -1 if free)
@@ -66,17 +66,17 @@ class TouchHandler(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                send(InputMsg.PenDown(x, y, pressure.coerceAtLeast(1), tiltX, tiltY))
+                send(InputMsg.PenDown(x, y, pressure.coerceAtLeast(1), tiltX, tiltY), event.eventTime)
                 penInContact = true
             }
             MotionEvent.ACTION_MOVE -> {
                 if (penInContact) {
-                    send(InputMsg.PenMove(x, y, pressure.coerceAtLeast(1), tiltX, tiltY))
+                    send(InputMsg.PenMove(x, y, pressure.coerceAtLeast(1), tiltX, tiltY), event.eventTime)
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (penInContact) {
-                    send(InputMsg.PenUp)
+                    send(InputMsg.PenUp, event.eventTime)
                     penInContact = false
                 }
             }
@@ -90,11 +90,11 @@ class TouchHandler(
         val changed = buttonState xor lastButtonState
         if (changed and MotionEvent.BUTTON_STYLUS_PRIMARY != 0) {
             val pressed = (buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0
-            send(InputMsg.PenButton(PenButtonId.STYLUS, pressed))
+            send(InputMsg.PenButton(PenButtonId.STYLUS, pressed), event.eventTime)
         }
         if (changed and MotionEvent.BUTTON_STYLUS_SECONDARY != 0) {
             val pressed = (buttonState and MotionEvent.BUTTON_STYLUS_SECONDARY) != 0
-            send(InputMsg.PenButton(PenButtonId.STYLUS2, pressed))
+            send(InputMsg.PenButton(PenButtonId.STYLUS2, pressed), event.eventTime)
         }
         lastButtonState = buttonState
 
@@ -113,7 +113,7 @@ class TouchHandler(
                     id = tid,
                     x = event.getX(idx).toInt(),
                     y = event.getY(idx).toInt(),
-                ))
+                ), event.eventTime)
             }
             MotionEvent.ACTION_MOVE -> {
                 for (idx in 0 until event.pointerCount) {
@@ -123,14 +123,14 @@ class TouchHandler(
                         slot = slot,
                         x = event.getX(idx).toInt(),
                         y = event.getY(idx).toInt(),
-                    ))
+                    ), event.eventTime)
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val idx = event.actionIndex
                 val slot = event.getPointerId(idx).coerceIn(0, MAX_SLOTS - 1)
                 if (activeSlots[slot] >= 0) {
-                    send(InputMsg.TouchUp(slot))
+                    send(InputMsg.TouchUp(slot), event.eventTime)
                     activeSlots[slot] = -1
                 }
             }
@@ -139,7 +139,7 @@ class TouchHandler(
                 // gesture away (e.g. system gesture interception).
                 for (slot in activeSlots.indices) {
                     if (activeSlots[slot] >= 0) {
-                        send(InputMsg.TouchUp(slot))
+                        send(InputMsg.TouchUp(slot), event.eventTime)
                         activeSlots[slot] = -1
                     }
                 }
