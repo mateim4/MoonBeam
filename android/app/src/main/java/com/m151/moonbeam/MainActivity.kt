@@ -25,6 +25,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.m151.moonbeam.decode.VideoDecoder
 import com.m151.moonbeam.net.WsClient
 import com.m151.moonbeam.protocol.Wire
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,41 +68,50 @@ class MoonBeamViewModel : ViewModel() {
 
     private fun connect() {
         viewModelScope.launch {
-            _status.value = _status.value.copy(state = ConnState.CONNECTING)
-            ws.connect().collect { ev ->
-                when (ev) {
-                    is WsClient.Event.Open -> {
-                        _status.value = _status.value.copy(state = ConnState.CONNECTED)
-                    }
-                    is WsClient.Event.Frame -> {
-                        val inbound = ev.inbound
-                        if (inbound is Wire.Inbound.Video) {
-                            val dec = decoder
-                            if (dec != null) {
-                                val nowUs = System.nanoTime() / 1_000
-                                if (dec.feed(inbound.annexB, nowUs, inbound.isKeyframe)) {
-                                    if (dec.drain()) {
-                                        _status.value = _status.value.copy(
-                                            framesDecoded = _status.value.framesDecoded + 1,
-                                        )
+            // Retry forever — the host may come and go; the app
+            // shouldn't need to be relaunched. 1s backoff is fine for
+            // M3, no need for jittered exponential at this scale.
+            while (true) {
+                _status.value = _status.value.copy(state = ConnState.CONNECTING)
+                ws.connect().collect { ev ->
+                    when (ev) {
+                        is WsClient.Event.Open -> {
+                            _status.value = _status.value.copy(
+                                state = ConnState.CONNECTED,
+                                lastError = null,
+                            )
+                        }
+                        is WsClient.Event.Frame -> {
+                            val inbound = ev.inbound
+                            if (inbound is Wire.Inbound.Video) {
+                                val dec = decoder
+                                if (dec != null) {
+                                    val nowUs = System.nanoTime() / 1_000
+                                    if (dec.feed(inbound.annexB, nowUs, inbound.isKeyframe)) {
+                                        if (dec.drain()) {
+                                            _status.value = _status.value.copy(
+                                                framesDecoded = _status.value.framesDecoded + 1,
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    is WsClient.Event.Closed -> {
-                        _status.value = _status.value.copy(
-                            state = ConnState.IDLE,
-                            lastError = "closed: ${ev.code} ${ev.reason}",
-                        )
-                    }
-                    is WsClient.Event.Failure -> {
-                        _status.value = _status.value.copy(
-                            state = ConnState.IDLE,
-                            lastError = ev.cause.message ?: ev.cause::class.java.simpleName,
-                        )
+                        is WsClient.Event.Closed -> {
+                            _status.value = _status.value.copy(
+                                state = ConnState.IDLE,
+                                lastError = "closed: ${ev.code} ${ev.reason}",
+                            )
+                        }
+                        is WsClient.Event.Failure -> {
+                            _status.value = _status.value.copy(
+                                state = ConnState.IDLE,
+                                lastError = ev.cause.message ?: ev.cause::class.java.simpleName,
+                            )
+                        }
                     }
                 }
+                delay(1_000)
             }
         }
     }

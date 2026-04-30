@@ -77,7 +77,11 @@ class WsClient(
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.w(TAG, "ws failure", t)
                 trySend(Event.Failure(t))
-                close(t)
+                // Close the flow normally — emit the failure as an
+                // Event, don't propagate the throwable as a flow
+                // cancellation cause. close(t) re-throws on the
+                // collector side and crashes the Activity.
+                close()
             }
         }
         socket = httpClient.newWebSocket(request, listener)
