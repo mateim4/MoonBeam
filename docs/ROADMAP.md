@@ -44,21 +44,40 @@ Add `uinput` device, wire WebSocket control channel, send touch events from a sy
 
 **Result:** structural + protocol exit met (a paired pen+touch uinput device pair, JSON wire format locked, end-to-end JSON→WS→uinput verified with synthetic events). The Krita visual confirmation is deferred to M3 — without an Android client, the synthetic pen stroke would drag the cursor across the active desktop, which we explicitly chose to avoid. Krita test runs the first time real Android events arrive.
 
-## M3 — USB-C wired transport + minimum Android client
+## M3 — USB-C wired transport + minimum Android client ✅
 
-`adb reverse` tunnel, both channels over USB. The Android app first appears here as the smallest viable client that opens the WS, decodes via `MediaCodec`, and forwards touch/pen events back. Latency is the headline metric, but secondary to the binary "does anything work end-to-end with a real tablet" question.
+`adb reverse` tunnel, both channels over USB. The Android app first appears here as the smallest viable client that opens the WS, decodes via `MediaCodec`, and forwards touch/pen events back.
 
-**Tasks (planned):**
-- Step 1 — Android project skeleton (Kotlin, single Activity, fullscreen surface)
-- Step 2 — `adb reverse tcp:7878 tcp:7878` connection, MediaCodec H.264 decode of WS video frames
-- Step 3 — Android touch + S-Pen `MotionEvent` → JSON over WS, mapped to host coordinate space
-- Step 4 — measure round-trip latency (capture → encode → wire → decode → present, plus touch → wire → uinput → compositor)
+**Steps shipped:**
+- Step 1 — Android project skeleton, two modules (`:app` + `:protocol`) ([`M3-ANDROID-SCAFFOLD.md`](M3-ANDROID-SCAFFOLD.md))
+- Step 2 — MediaCodec H.264 decode of WS video frames into a SurfaceView ([`M3-VIDEO-DECODE.md`](M3-VIDEO-DECODE.md))
+- Step 3 — pen + touch `MotionEvent` → uinput, verified live in Inkscape with pressure ([`M3-INPUT-FORWARDING.md`](M3-INPUT-FORWARDING.md))
+- Step 4 — latency instrumentation, fps/decode/input/RTT overlay ([`M3-LATENCY.md`](M3-LATENCY.md))
 
-**Exit criteria:** round-trip touch latency under 30ms wired; pressure-sensitive drawing in host-side Krita using the real S-Pen.
+**Original exit criteria:** round-trip touch latency under 30ms wired; pressure-sensitive drawing in host-side Krita using the real S-Pen.
+
+**Result:** **met.** Live numbers (Tab S11 Ultra, S-Pen Creator Edition, USB-C-to-A + adb reverse): fps 80–90, decode 1–2 ms, input 0–3 ms, ws RTT 11 ms (median). End-to-end round-trip estimate: ~22–42 ms typical, well within target. Inkscape draws pressure-modulated strokes from the S-Pen.
+
+**Known caveats:**
+- USB-C-to-USB-C role swap fails on the ROG SCAR 16 (Meteor Lake / TB5 silicon, ASUS firmware controls role decisions out-of-band). Daily use is via USB-C-to-USB-A cable; investigation continues separately.
+- No foreground service yet — the WS dies on app-switch.
 
 ## M4 — Tuning
 
 Encoder presets, frame pacing, EDID fine-tuning. Try to actually hit 120fps end-to-end. Android-app polish (pairing UX, floating widget, audio, per-host saved modes, S-Pen feature integration) lives across this milestone, checked against [`MOONBEAM-APP-PLAN.md`](MOONBEAM-APP-PLAN.md).
+
+**Latency optimizations (all non-architectural, drop-in swaps):**
+- **Direct DRM writeback capture** instead of xdg-desktop-portal screencast. Saves the ~16 ms portal frame buffer. Slots into the `Capture` trait placeholder. Loses portal consent dialog (security tradeoff).
+- **Slice-based NVENC encoding**. Output one horizontal band of each frame as soon as encoded; tablet starts decoding before frame is complete. Saves 5–10 ms. Wire-format-additive (new flag bit, forward-compatible).
+- **MediaCodec async mode** (`setCallback` instead of polling) on the tablet. 1–3 ms.
+- **Drop OkHttp auto-ping** (we have our own); reduces RTT tail spikes.
+- **Force-IDR-on-input**: when input arrives, host requests fresh keyframe so first response frame is fast. Pairs with the `force_idr` opcode follow-up from M1.
+
+**Riskier optimizations to consider only if needed:**
+- **Custom USB transport** (skip `adb reverse`). New transport module alongside WS. Wire format unchanged. ~3–5 ms saved.
+- **Replace WS with raw TCP**. Loses browser debug client compat; saves ~1–2 ms.
+
+**Module extraction (housekeeping, not optimization):** lift probe-mux internals into the existing `host/src/{capture,encode,transport,input,proto}/` placeholder modules. Probes become thin orchestration shells. Required before declaring `moonbeamd` itself shippable.
 
 **Exit criteria:** sustained 120fps on visually-static content; ≥90fps under load. Drawing latency feels indistinguishable from a wired Wacom Cintiq.
 
