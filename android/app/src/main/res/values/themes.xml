@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Fullscreen, dark, no system bars. The app's surface is the entire
+      screen — Wayland-side orientation is host-driven per
+      docs/MOONBEAM-APP-PLAN.md §4 so we lock landscape and disable
+      system rotation.
+    -->
+    <style name="Theme.MoonBeam" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+    </style>
+</resources>

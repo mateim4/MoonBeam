@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  M3 minimum manifest. Permissions match docs/MOONBEAM-APP-PLAN.md §11
+  but only the ones the M3 client actually needs:
+    - INTERNET: WebSocket connection
+    - FOREGROUND_SERVICE + FOREGROUND_SERVICE_MEDIA_PLAYBACK: keep the
+      decode loop alive when the user switches apps
+    - WAKE_LOCK: hold a partial wake-lock while connected so video
+      doesn't stall
+    - POST_NOTIFICATIONS: required since Android 13 to show the
+      foreground-service notification
+
+  Deferred to M4: NEARBY_WIFI_DEVICES (mDNS), USB device-attached intent,
+  pairing flow, audio.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:label="MoonBeam"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MoonBeam"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.MoonBeam">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+</manifest>
