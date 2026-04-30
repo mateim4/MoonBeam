@@ -316,6 +316,7 @@ async fn handle_inbound(bytes: &[u8], state: &AppState) -> Result<()> {
     let payload = &bytes[2..];
     let msg: InputMsg =
         serde_json::from_slice(payload).context("parse JSON input message")?;
+    println!("  input: {msg:?}");
     apply(state, msg).await
 }
 

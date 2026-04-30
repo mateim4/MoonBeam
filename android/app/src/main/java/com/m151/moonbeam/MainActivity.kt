@@ -23,7 +23,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.m151.moonbeam.decode.VideoDecoder
+import com.m151.moonbeam.input.TouchHandler
 import com.m151.moonbeam.net.WsClient
+import com.m151.moonbeam.protocol.InputMsg
 import com.m151.moonbeam.protocol.Wire
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,6 +67,13 @@ class MoonBeamViewModel : ViewModel() {
     fun detachDecoder() {
         decoder = null
     }
+
+    /**
+     * Forward a captured input event to the host. Returns false if
+     * the WS isn't open yet — the TouchHandler can ignore that
+     * (input before connection lands on the floor; the user retries).
+     */
+    fun sendInput(msg: InputMsg): Boolean = ws.send(msg)
 
     private fun connect() {
         viewModelScope.launch {
@@ -138,6 +147,17 @@ fun MoonBeamRoot(viewModel: MoonBeamViewModel = viewModel()) {
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 SurfaceView(ctx).apply {
+                    isFocusable = true
+                    isFocusableInTouchMode = true
+                    val touchHandler = TouchHandler(send = { msg -> viewModel.sendInput(msg) })
+                    setOnTouchListener { _, event ->
+                        Log.d("MoonBeam.Touch", "touch action=${event.actionMasked} tool=${event.getToolType(0)} src=${event.source}")
+                        touchHandler.handle(event)
+                    }
+                    setOnHoverListener { _, event ->
+                        Log.d("MoonBeam.Touch", "hover action=${event.actionMasked} tool=${event.getToolType(0)} src=${event.source}")
+                        touchHandler.handle(event)
+                    }
                     holder.addCallback(object : SurfaceHolder.Callback {
                         private var localDecoder: VideoDecoder? = null
                         override fun surfaceCreated(holder: SurfaceHolder) {
