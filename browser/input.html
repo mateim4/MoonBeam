@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<!--
+  MoonBeam M2 step 3 — input return debug page.
+
+  Sends scripted pen / touch sequences to the probe-input-server on /ws
+  using the locked binary framing: [0x03][flags=0][json]. The server
+  translates each frame into a uinput write and the kernel routes it
+  to whatever app is listening (Krita for pen, the compositor for
+  touch).
+
+  This page is debugging-only, like the M1 video browser client. The
+  real client is the Android app in M3.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MoonBeam — input probe</title>
+  <style>
+    body { margin: 0; padding: 16px; background: #1a1a1a; color: #eee;
+           font: 14px/1.5 system-ui, sans-serif; }
+    h1 { font-size: 16px; margin: 0 0 12px; }
+    button { background: #2c5; color: #000; border: 0; padding: 10px 18px;
+             margin: 4px 6px 4px 0; border-radius: 4px; font: inherit;
+             cursor: pointer; }
+    button:disabled { background: #555; color: #aaa; cursor: not-allowed; }
+    button.touch { background: #5ac; }
+    #log { background: #000; color: #8f8; padding: 10px; border-radius: 4px;
+           white-space: pre-wrap; height: 50vh; overflow-y: auto;
+           font-family: ui-monospace, monospace; font-size: 12px;
+           margin-top: 16px; }
+    .status { display: inline-block; padding: 2px 8px; border-radius: 3px;
+              background: #c33; color: #fff; }
+    .status.connected { background: #2c5; color: #000; }
+  </style>
+</head>
+<body>
+  <h1>MoonBeam input probe — <span id="status" class="status">disconnected</span></h1>
+
+  <div>
+    <button id="pen-stroke">Send pen stroke (left → right, pressure ramp)</button>
+    <button id="pen-tap">Send pen tap (single press at center)</button>
+    <button id="pen-button">Send stylus button toggle</button>
+  </div>
+  <div>
+    <button class="touch" id="touch-pinch">Send 2-finger pinch-out</button>
+    <button class="touch" id="touch-tap">Send single-finger tap</button>
+  </div>
+  <div>
+    <small>Open Krita with a fresh canvas and put it under your cursor before clicking pen-stroke. The "MoonBeam Pen" device delivers events to whichever Wayland surface KWin says is the tablet target.</small>
+  </div>
+
+  <div id="log"></div>
+
+<script>
+const TYPE_INPUT = 0x03;
+const FLAG_NONE = 0x00;
+const WIDTH = 2960;
+const HEIGHT = 1848;
+const PRESSURE_MAX = 4095;
+
+const logEl = document.getElementById("log");
+const statusEl = document.getElementById("status");
+
+function log(...args) {
+  const ts = new Date().toLocaleTimeString();
+  const msg = args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ");
+  logEl.textContent += `[${ts}] ${msg}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+let ws = null;
+function connect() {
+  const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+  log(`connecting to ${url}`);
+  ws = new WebSocket(url);
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => {
+    statusEl.textContent = "connected";
+    statusEl.className = "status connected";
+    log("ws open");
+  };
+  ws.onclose = () => {
+    statusEl.textContent = "disconnected";
+    statusEl.className = "status";
+    log("ws closed, retrying in 1s");
+    setTimeout(connect, 1000);
+  };
+  ws.onerror = (e) => log("ws error", e.message || "(no detail)");
+}
+connect();
+
+const enc = new TextEncoder();
+function send(obj) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    log("not connected, dropping", obj);
+    return;
+  }
+  const json = enc.encode(JSON.stringify(obj));
+  const frame = new Uint8Array(2 + json.length);
+  frame[0] = TYPE_INPUT;
+  frame[1] = FLAG_NONE;
+  frame.set(json, 2);
+  ws.send(frame);
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function penStroke() {
+  log("pen stroke: left → right, pressure ramp");
+  const yMid = HEIGHT / 2 | 0;
+  const samples = 60;
+  const totalMs = 1500;
+  const dt = totalMs / samples;
+  send({ type: "pen_down", x: 0, y: yMid, pressure: 1, tilt_x: 0, tilt_y: 0 });
+  await sleep(dt);
+  for (let i = 1; i <= samples; i++) {
+    const t = i / samples;
+    const x = Math.round(t * (WIDTH - 1));
+    const pressure = Math.round((t < 0.5 ? t / 0.5 : (1 - t) / 0.5) * PRESSURE_MAX);
+    send({ type: "pen_move", x, y: yMid, pressure: Math.max(1, pressure), tilt_x: 0, tilt_y: 0 });
+    await sleep(dt);
+  }
+  send({ type: "pen_up" });
+  log("pen stroke done");
+}
+
+async function penTap() {
+  log("pen tap at center");
+  const x = WIDTH / 2 | 0;
+  const y = HEIGHT / 2 | 0;
+  send({ type: "pen_down", x, y, pressure: PRESSURE_MAX / 2 | 0, tilt_x: 0, tilt_y: 0 });
+  await sleep(50);
+  send({ type: "pen_up" });
+  log("pen tap done");
+}
+
+async function penButtonToggle() {
+  log("stylus button: press, hold 200ms, release");
+  send({ type: "pen_button", button: "stylus", state: true });
+  await sleep(200);
+  send({ type: "pen_button", button: "stylus", state: false });
+  log("stylus button done");
+}
+
+async function touchPinch() {
+  log("two-finger pinch-out");
+  const cx = WIDTH / 2 | 0;
+  const cy = HEIGHT / 2 | 0;
+  const leftEnd = WIDTH / 4 | 0;
+  const rightEnd = WIDTH - leftEnd;
+  send({ type: "touch_down", slot: 0, id: 1001, x: cx, y: cy, major: 200, pressure: 100 });
+  send({ type: "touch_down", slot: 1, id: 1002, x: cx, y: cy, major: 200, pressure: 100 });
+  const samples = 60;
+  const totalMs = 1500;
+  const dt = totalMs / samples;
+  for (let i = 1; i <= samples; i++) {
+    const t = i / samples;
+    const x0 = Math.round(cx + (leftEnd - cx) * t);
+    const x1 = Math.round(cx + (rightEnd - cx) * t);
+    send({ type: "touch_move", slot: 0, x: x0, y: cy, major: 200, pressure: 100 });
+    send({ type: "touch_move", slot: 1, x: x1, y: cy, major: 200, pressure: 100 });
+    await sleep(dt);
+  }
+  send({ type: "touch_up", slot: 0 });
+  send({ type: "touch_up", slot: 1 });
+  log("pinch done");
+}
+
+async function touchTap() {
+  log("single-finger tap at center");
+  const x = WIDTH / 2 | 0;
+  const y = HEIGHT / 2 | 0;
+  send({ type: "touch_down", slot: 0, id: 2001, x, y, major: 200, pressure: 100 });
+  await sleep(50);
+  send({ type: "touch_up", slot: 0 });
+  log("tap done");
+}
+
+document.getElementById("pen-stroke").onclick = penStroke;
+document.getElementById("pen-tap").onclick = penTap;
+document.getElementById("pen-button").onclick = penButtonToggle;
+document.getElementById("touch-pinch").onclick = touchPinch;
+document.getElementById("touch-tap").onclick = touchTap;
+</script>
+</body>
+</html>
