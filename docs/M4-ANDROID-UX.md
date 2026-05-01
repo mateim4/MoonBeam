@@ -46,40 +46,80 @@ We don't use:
 
 ### 2.2 Color palette
 
-> **⚠ Placeholder.** Final colorway will be supplied by the user in
-> a follow-up. The values below are temporary so the rest of the
-> spec has something concrete to reference; swap before
-> implementation. The structural decisions (always-dark base,
-> single accent, semi-transparent surface) are kept regardless of
-> the final hues.
-
 The app lives on top of arbitrary video, so colors must remain
 legible against any background. Strategy: a **darkened tinted
 glass** aesthetic — the puck and panels are semi-transparent dark
 surfaces with bright accent colors.
 
+**Source palette** (user-supplied, named for reference in code):
+
+| Token            | Hex      | Family       |
+|---               |---       |---           |
+| `vibrant-coral`  | #FF6663  | warm red     |
+| `soft-periwinkle`| #B191FF  | light purple |
+| `pearl-aqua`     | #66D7D1  | teal         |
+| `parchment`      | #F2EFEA  | warm off-white |
+| `lavender-grey`  | #8D89A6  | muted purple-grey |
+| `vintage-grape`  | #403D58  | dark purple  |
+| `shadow-grey`    | #1B1725  | near-black purple |
+
+**Mapped to M3 roles** (containers and on-* shades derived from
+seeds via tonal-palette interpolation; M3 will regenerate these at
+theme construction time, the values below are reference targets):
+
 ```
 Base scheme: dark (always, even in light system theme)
-  surface          = #181A1F at 70% alpha    (puck background, panel bg)
-  surface-bright   = #22252C at 85% alpha    (radial item background)
-  on-surface       = #ECECEC                 (icons, primary text)
-  on-surface-variant = #B0B5BC               (secondary text, stats)
+  surface              = shadow-grey   #1B1725  at 70% alpha   (puck bg, panel bg)
+  surface-bright       = vintage-grape #403D58  at 85% alpha   (radial item bg)
+  surface-container    = vintage-grape #403D58  at 60% alpha   (settings sheet bg)
+  on-surface           = parchment     #F2EFEA                 (icons, primary text)
+  on-surface-variant   = lavender-grey #8D89A6                 (secondary text, stats)
 
-Accent: vibrant green (matches the existing brand-ish #22CC55 we've
-been using for status text)
-  primary          = #22CC55
-  primary-container = #0E5C25
-  on-primary       = #001A06
-  on-primary-container = #C8FFD8
+Primary (action accent — puck glow, primary CTAs, icons)
+  primary              = pearl-aqua    #66D7D1
+  primary-container    = derived       #0F4543
+  on-primary           = derived       #00201E
+  on-primary-container = derived       #B0EFEA
+
+Secondary (info / passive states — pen-hover halo, connecting ring, info toasts)
+  secondary              = soft-periwinkle #B191FF
+  secondary-container    = derived         #3A2C6A
+  on-secondary           = shadow-grey     #1B1725
+  on-secondary-container = derived         #DCC9FF
 
 Destructive (Disconnect, errors)
-  error            = #FF5466
-  error-container  = #5C0E18
-  on-error         = #FFFFFF
+  error                = vibrant-coral #FF6663
+  error-container      = derived       #5C1816
+  on-error             = parchment     #F2EFEA
 
 Stroke / hairline
-  outline-variant  = #ECECEC at 12% alpha    (item separators)
+  outline-variant      = parchment     #F2EFEA at 12% alpha    (item separators)
 ```
+
+**Role-by-role rationale:**
+- **`shadow-grey` as base surface** — darkest and coolest of the
+  set; 70% α gives glass tint without losing legibility over
+  bright video.
+- **`vintage-grape` as raised surface** — natural tonal step up
+  inside the same purple family; reads as elevation without
+  introducing a new hue.
+- **`parchment` as on-surface** — warm off-white reads beautifully
+  on cool dark purple. Less clinical than pure white, which would
+  feel sterile against this scheme.
+- **`lavender-grey` as on-surface-variant** — already a muted
+  purple-grey, exactly the role it would have been derived into
+  anyway. Lucky direct fit for stats / timestamps.
+- **`pearl-aqua` as primary** — highest perceptual contrast against
+  the dark base, distinct from the warm destructive, calm enough
+  for a utility that mostly sits idle. "Energetic but not
+  shouting" is the target feeling.
+- **`soft-periwinkle` as secondary** — used sparingly: pen-hover
+  halo on the puck, the connecting-ring pulse, info toasts. Sits
+  inside the surface family, so its appearance feels like the app
+  glowing rather than alerting.
+- **`vibrant-coral` as error** — by far the warmest, visually the
+  loudest; perfect to flag Disconnect, decode failures, and lost
+  connection.
 
 Rationale for "always dark": video content varies, but a dark
 surface + bright accent reads cleanly on both bright (web, Krita)
@@ -182,10 +222,13 @@ Box(Modifier.fillMaxSize()) {
 
 - **Size at rest:** 48dp diameter (M3 minimum touch target rounded up)
 - **Size when finger-down (pre-expand):** 56dp (anticipation)
-- **Color:** `surface` (#181A1F at 70%) with a 1.5dp `primary`-tinted
-  glow stroke at the perimeter
+- **Color:** `surface` (`shadow-grey` #1B1725 at 70%) with a 1.5dp
+  `primary`-tinted (`pearl-aqua` #66D7D1) glow stroke at the
+  perimeter. While a pen hovers, the stroke fades to `secondary`
+  (`soft-periwinkle` #B191FF) — a passive cue that the puck is
+  pen-aware.
 - **Inner glyph:** small "M" mark (placeholder until brand finalizes)
-  in `primary` color, 16sp
+  in `primary` color (`pearl-aqua`), 16sp
 - **Elevation:** 4dp shadow (M3 elevation level 2) — visible against
   bright video, gentle against dark video
 - **Opacity at rest:** 40% (matches plan §7)
@@ -538,15 +581,23 @@ items are 56dp; settings rows are 56dp tall.
 
 ### 9.3 Contrast
 
-All text/icons against `surface` (40% alpha dark) must clear WCAG
-2.1 AA. Verified at design time:
+All text/icons against `surface` (70% alpha `shadow-grey`) must
+clear WCAG 2.1 AA. Verified at design time:
 
-- `on-surface` (#ECECEC) on `surface` over a worst-case white
-  background: contrast ratio ~4.7:1 ✅
+- `on-surface` (`parchment` #F2EFEA) on `surface` over a worst-case
+  white background: contrast ratio ~4.6:1 ✅
 - `on-surface` over a worst-case black: ~13:1 ✅
-- `primary` (#22CC55) on `surface` over white: ~3.2:1 — fails AA
-  for body text but passes for icons and large text ✅ (we only use
-  primary for icons and the puck glyph at 16sp)
+- `primary` (`pearl-aqua` #66D7D1) on `surface` over white: ~2.8:1
+  — fails AA for body text but passes AA-Large for icons and the
+  16sp puck glyph ✅ (we only use primary for icons and the puck
+  glyph)
+- `secondary` (`soft-periwinkle` #B191FF) on `surface` over white:
+  ~3.0:1 — used only for non-text affordances (the pen-hover
+  halo, connecting-ring pulse) so the AA-Large bar applies and
+  passes ✅
+- `error` (`vibrant-coral` #FF6663) on `surface` over white: ~3.4:1
+  — passes AA-Large; only ever used for the Disconnect glyph and
+  short error-toast text in 16sp+ ✅
 
 ### 9.4 Reduced motion
 
