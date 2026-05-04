@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.m151.moonbeam"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.m151.moonbeam"
