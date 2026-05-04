@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -26,6 +27,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.m151.moonbeam.decode.VideoDecoder
+import com.m151.moonbeam.ui.theme.MoonBeamTheme
 import com.m151.moonbeam.input.TouchHandler
 import com.m151.moonbeam.net.WsClient
 import com.m151.moonbeam.protocol.InputMsg
@@ -39,7 +41,11 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MoonBeamRoot() }
+        setContent {
+            MoonBeamTheme {
+                MoonBeamRoot()
+            }
+        }
     }
 }
 
@@ -258,7 +264,7 @@ private fun StatusOverlay(status: MoonBeamViewModel.Status, modifier: Modifier =
     }
     Text(
         text = text,
-        color = Color(0xFF22CC55),
+        color = MaterialTheme.colorScheme.primary,
         modifier = modifier.padding(24.dp),
     )
 }
@@ -273,7 +279,7 @@ private fun StatsOverlay(stats: MoonBeamViewModel.Stats, modifier: Modifier = Mo
     }
     Text(
         text = text,
-        color = Color(0x9922CC55),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontSize = 11.sp,
         fontFamily = FontFamily.Monospace,
         modifier = modifier.padding(8.dp),
