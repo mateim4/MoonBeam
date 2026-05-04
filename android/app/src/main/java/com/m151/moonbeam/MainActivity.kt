@@ -31,6 +31,11 @@ import com.m151.moonbeam.decode.VideoDecoder
 import com.m151.moonbeam.ui.theme.MoonBeamTheme
 import com.m151.moonbeam.ui.puck.Puck
 import com.m151.moonbeam.ui.puck.PuckState
+import com.m151.moonbeam.ui.radial.RadialAudio
+import com.m151.moonbeam.ui.radial.RadialMenu
+import com.m151.moonbeam.ui.radial.RadialMenuState
+import com.m151.moonbeam.ui.radial.RadialMode
+import com.m151.moonbeam.ui.radial.RadialQuality
 import com.m151.moonbeam.input.TouchHandler
 import com.m151.moonbeam.net.WsClient
 import com.m151.moonbeam.protocol.InputMsg
@@ -64,6 +69,38 @@ class MoonBeamViewModel : ViewModel() {
 
     fun onPuckStateChange(state: PuckState) {
         _puckState.value = state
+    }
+
+    private val _radialState = MutableStateFlow(RadialMenuState())
+    val radialState: StateFlow<RadialMenuState> = _radialState.asStateFlow()
+
+    fun openRadialMenu(center: Offset) {
+        _radialState.value = _radialState.value.copy(isOpen = true, center = center)
+    }
+
+    fun closeRadialMenu() {
+        _radialState.value = _radialState.value.copy(isOpen = false)
+    }
+
+    fun toggleRadialMode() {
+        val current = _radialState.value.mode
+        _radialState.value = _radialState.value.copy(
+            mode = if (current == RadialMode.EXTEND) RadialMode.MIRROR else RadialMode.EXTEND
+        )
+    }
+
+    fun toggleRadialQuality() {
+        val current = _radialState.value.quality
+        _radialState.value = _radialState.value.copy(
+            quality = if (current == RadialQuality.DISPLAY) RadialQuality.DRAWING else RadialQuality.DISPLAY
+        )
+    }
+
+    fun toggleRadialAudio() {
+        val current = _radialState.value.audio
+        _radialState.value = _radialState.value.copy(
+            audio = if (current == RadialAudio.ON) RadialAudio.OFF else RadialAudio.ON
+        )
     }
 
     @Volatile private var decoder: VideoDecoder? = null
@@ -209,6 +246,7 @@ fun MoonBeamRoot(viewModel: MoonBeamViewModel = viewModel()) {
     val status by viewModel.status.collectAsState()
     val stats by viewModel.stats.collectAsState()
     val puckState by viewModel.puckState.collectAsState()
+    val radialState by viewModel.radialState.collectAsState()
 
     BoxWithConstraints(
         modifier = Modifier
@@ -286,7 +324,21 @@ fun MoonBeamRoot(viewModel: MoonBeamViewModel = viewModel()) {
                 state = puckState,
                 onStateChange = { viewModel.onPuckStateChange(it) },
                 containerWidth = width,
-                containerHeight = height
+                containerHeight = height,
+                onTap = { center -> viewModel.openRadialMenu(center) }
+            )
+
+            RadialMenu(
+                state = radialState,
+                containerWidth = width,
+                containerHeight = height,
+                onDismiss = { viewModel.closeRadialMenu() },
+                onModeToggle = { viewModel.toggleRadialMode() },
+                onQualityToggle = { viewModel.toggleRadialQuality() },
+                onAudioToggle = { viewModel.toggleRadialAudio() },
+                onRotate = { /* Logged in RadialMenu.kt */ },
+                onSettings = { /* Logged in RadialMenu.kt */ },
+                onDisconnect = { /* Logged in RadialMenu.kt */ }
             )
         }
     }
