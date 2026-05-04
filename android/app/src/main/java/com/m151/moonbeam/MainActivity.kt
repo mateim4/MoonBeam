@@ -9,16 +9,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,6 +32,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.m151.moonbeam.decode.VideoDecoder
 import com.m151.moonbeam.ui.theme.MoonBeamTheme
+import com.m151.moonbeam.ui.puck.Puck
+import com.m151.moonbeam.ui.puck.PuckState
 import com.m151.moonbeam.input.TouchHandler
 import com.m151.moonbeam.net.WsClient
 import com.m151.moonbeam.protocol.InputMsg
@@ -55,6 +61,13 @@ class MoonBeamViewModel : ViewModel() {
     val status: StateFlow<Status> = _status.asStateFlow()
     private val _stats = MutableStateFlow(Stats())
     val stats: StateFlow<Stats> = _stats.asStateFlow()
+
+    private val _puckState = MutableStateFlow(PuckState())
+    val puckState: StateFlow<PuckState> = _puckState.asStateFlow()
+
+    fun onPuckStateChange(state: PuckState) {
+        _puckState.value = state
+    }
 
     @Volatile private var decoder: VideoDecoder? = null
 
@@ -198,12 +211,35 @@ class MoonBeamViewModel : ViewModel() {
 fun MoonBeamRoot(viewModel: MoonBeamViewModel = viewModel()) {
     val status by viewModel.status.collectAsState()
     val stats by viewModel.stats.collectAsState()
+    val puckState by viewModel.puckState.collectAsState()
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black),
     ) {
+        val width = constraints.maxWidth.toFloat()
+        val height = constraints.maxHeight.toFloat()
+
+        // Initial puck position: bottom-right, 16dp inset
+        val density = LocalDensity.current
+        LaunchedEffect(width, height) {
+            if (puckState.position == Offset.Zero && width > 0 && height > 0) {
+                val insetPx = with(density) { 16.dp.toPx() }
+                val puckSizePx = with(density) { 48.dp.toPx() }
+                viewModel.onPuckStateChange(
+                    puckState.copy(
+                        position = Offset(
+                            width - puckSizePx - insetPx,
+                            height - puckSizePx - insetPx
+                        ),
+                        opacity = 0.4f,
+                        sizeMultiplier = 1.0f
+                    )
+                )
+            }
+        }
+
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
@@ -248,6 +284,13 @@ fun MoonBeamRoot(viewModel: MoonBeamViewModel = viewModel()) {
             // Once video is flowing, show the latency stats in the
             // top-right. Always-on, low-attention.
             StatsOverlay(stats, modifier = Modifier.align(Alignment.TopEnd))
+
+            Puck(
+                state = puckState,
+                onStateChange = { viewModel.onPuckStateChange(it) },
+                containerWidth = width,
+                containerHeight = height
+            )
         }
     }
 }
@@ -282,6 +325,6 @@ private fun StatsOverlay(stats: MoonBeamViewModel.Stats, modifier: Modifier = Mo
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontSize = 11.sp,
         fontFamily = FontFamily.Monospace,
-        modifier = modifier.padding(8.dp),
+        modifier = modifier.padding(12.dp),
     )
 }
