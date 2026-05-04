@@ -50,6 +50,7 @@ fun Puck(
     onStateChange: (PuckState) -> Unit,
     containerWidth: Float,
     containerHeight: Float,
+    onTap: (Offset) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -164,7 +165,9 @@ fun Puck(
 
                     // Tap detection §10.3
                     if (!hasMovedBeyondSlop && (endPosition - startPosition).getDistance() < slopPx) {
-                        Log.d("Puck", "tap")
+                        val center = endPosition + Offset(radiusPx, radiusPx)
+                        onTap(center)
+
                         // Spring back fully on-screen §4.3
                         val targetPos = Offset(
                             endPosition.x.coerceIn(0f, containerWidth - baseSizePx),
